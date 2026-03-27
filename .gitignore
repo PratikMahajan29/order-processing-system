@@ -7,3 +7,8 @@ target/
 .idea/
 .vscode/
 .env 
+/mvnw.cmd
+/mvnw
+/HELP.md
+/.gitattributes
+/src/test/

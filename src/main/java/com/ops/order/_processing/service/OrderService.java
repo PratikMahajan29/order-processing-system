@@ -1,6 +1,8 @@
 package com.ops.order._processing.service;
 
+import com.ops.order._processing.dto.OrderRequestDTO;
 import com.ops.order._processing.entity.Order;
+import com.ops.order._processing.event.OrderEvent;
 import com.ops.order._processing.repository.OrderRepository;
 import org.springframework.stereotype.Service;
 
@@ -9,29 +11,21 @@ import java.time.LocalDateTime;
 @Service
 public class OrderService {
 
-    private final OrderRepository orderRepository;
+    private final KafkaProducerService producerService;
 
-    public OrderService(OrderRepository orderRepository) {
-        this.orderRepository = orderRepository;
+    public OrderService(KafkaProducerService producerService) {
+        this.producerService = producerService;
     }
 
-    public Order createOrder(Order order) {
+    public void createOrder(OrderRequestDTO dto) {
 
-        // Defensive logic (don’t trust input blindly)
-        if (order.getProductName() == null || order.getQuantity() == null) {
-            throw new RuntimeException("Invalid order data");
-        }
+        OrderEvent event = new OrderEvent();
 
-        // System-controlled fields
-        order.setStatus("CREATED");
-        order.setCreatedAt(LocalDateTime.now());
-        order.setUpdatedAt(LocalDateTime.now());
+        event.setEventId(java.util.UUID.randomUUID().toString());
+        event.setProductName(dto.getProductName());
+        event.setQuantity(dto.getQuantity());
+        event.setStatus("CREATED");
 
-        return orderRepository.save(order);
-    }
-
-    public Order getOrder(Long id) {
-        return orderRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Order not found with id: " + id));
+        producerService.sendOrderEvent(event);
     }
 }
