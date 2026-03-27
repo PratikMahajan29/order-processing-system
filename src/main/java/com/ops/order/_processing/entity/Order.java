@@ -12,6 +12,8 @@ public class Order {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    private String eventId;
+
     private String productName;
 
     private Integer quantity;
@@ -25,7 +27,8 @@ public class Order {
     // Constructors
     public Order() {}
 
-    public Order(String productName, Integer quantity, String status) {
+    public Order(String eventId, String productName, Integer quantity, String status) {
+        this.eventId = eventId;
         this.productName = productName;
         this.quantity = quantity;
         this.status = status;
@@ -79,4 +82,8 @@ public class Order {
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
     }
+
+    public String getEventId() {return eventId;}
+
+    public void setEventId(String eventId) {this.eventId = eventId;}
 }
