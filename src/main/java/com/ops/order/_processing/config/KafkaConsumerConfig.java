@@ -9,6 +9,11 @@ import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.listener.ContainerProperties;
+import org.apache.kafka.common.TopicPartition;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.listener.DefaultErrorHandler;
+import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
+import org.springframework.util.backoff.ExponentialBackOff;
 
 
 import java.util.HashMap;
@@ -24,7 +29,7 @@ public class KafkaConsumerConfig {
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "order-group");
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, 
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
             "org.springframework.kafka.support.serializer.JsonDeserializer");
         props.put("spring.json.trusted.packages", "com.ops.order._processing.event");
         props.put("spring.json.value.default.type", "com.ops.order._processing.event.OrderEvent");
@@ -34,14 +39,48 @@ public class KafkaConsumerConfig {
 
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, OrderEvent> kafkaListenerContainerFactory(
-            ConsumerFactory<String, OrderEvent> consumerFactory) {
+            ConsumerFactory<String, OrderEvent> consumerFactory,
+            DefaultErrorHandler errorHandler) {
 
         ConcurrentKafkaListenerContainerFactory<String, OrderEvent> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
 
         factory.setConsumerFactory(consumerFactory);
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);
+        factory.setCommonErrorHandler(errorHandler);
 
         return factory;
+    }
+
+    @Bean
+    public DefaultErrorHandler errorHandler(KafkaTemplate<String, OrderEvent> kafkaTemplate) {
+
+        DeadLetterPublishingRecoverer recoverer =
+                new DeadLetterPublishingRecoverer(
+                        kafkaTemplate,
+                        (record, ex) -> new TopicPartition("order-topic-dlq", record.partition())
+                );
+
+        recoverer.setHeadersFunction((record, ex) -> {
+            org.apache.kafka.common.header.internals.RecordHeaders headers =
+                    new org.apache.kafka.common.header.internals.RecordHeaders();
+
+            headers.add("error-message", ex.getMessage().getBytes());
+            headers.add("exception-type", ex.getClass().getSimpleName().getBytes());
+
+            return headers;
+        });
+
+        ExponentialBackOff backOff = new ExponentialBackOff();
+        backOff.setInitialInterval(1000L);
+        backOff.setMultiplier(2.0);
+        backOff.setMaxInterval(10000L);
+
+        DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, backOff);
+
+        // This tells the error handler to not retry when NonRetryableException is thrown and directly send the message to DLQ.
+        errorHandler.addNotRetryableExceptions(com.ops.order._processing.exception.NonRetryableException.class);
+
+        return errorHandler;
     }
 }
