@@ -14,6 +14,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.util.backoff.ExponentialBackOff;
+import org.springframework.util.backoff.FixedBackOff;
 
 
 import java.util.HashMap;
@@ -71,10 +72,13 @@ public class KafkaConsumerConfig {
             return headers;
         });
 
-        ExponentialBackOff backOff = new ExponentialBackOff();
-        backOff.setInitialInterval(1000L);
-        backOff.setMultiplier(2.0);
-        backOff.setMaxInterval(10000L);
+        FixedBackOff backOff = new FixedBackOff(2000L, 3);
+
+//        ExponentialBackOff backOff = new ExponentialBackOff();
+//        backOff.setInitialInterval(1000L);
+//        backOff.setMultiplier(2.0);
+//        backOff.setMaxInterval(10000L);
+//        backOff.setMaxElapsedTime(30000L);
 
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, backOff);
 

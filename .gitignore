@@ -12,3 +12,5 @@ target/
 /HELP.md
 /.gitattributes
 /src/test/
+/src/main/resources/application.properties
+/.mvn/

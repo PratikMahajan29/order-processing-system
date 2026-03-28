@@ -24,15 +24,9 @@ public class KafkaConsumerService {
     @KafkaListener(topics = "order-topic", groupId = "order-group")
     public void consume(OrderEvent event, Acknowledgment ack) {
 
-        try {
-             // Maintain the idempotency by checking if the event has already been processed
-            Optional<Order> existing  = orderRepository.findByEventId(event.getEventId());
+        System.out.println("Processing event: " + event.getEventId());
 
-            if(existing.isPresent()){
-                System.out.print("Duplicate Event ignored: " + event.getEventId());
-                ack.acknowledge(); // Acknowledge to avoid reprocessing
-                return;
-            }
+        try {
 
             if(event.getQuantity() <= 0){
                 throw new NonRetryableException("Invalid quantity: " + event.getQuantity());
@@ -50,13 +44,26 @@ public class KafkaConsumerService {
 
             ack.acknowledge(); // ---> This tells kafka that mark message as processed.
 
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+
+            if (isDuplicateEvent(ex)) {
+                System.out.println("Duplicate event ignored: " + event.getEventId());
+                ack.acknowledge(); //  treat duplicate as success
+            } else {
+                throw new RetryableException("Retryable error: " + ex);
+            }
+
         } catch (NonRetryableException e) {
-            System.err.println("Non-Retryable error: " + e.getMessage());
-            throw e; // Goes to DLQ
+            throw e;
+
+        } catch (Exception e) {
+            System.out.println("Retry triggered for: " + event.getEventId() + " due to: " + e.getMessage());
+            throw new RetryableException(e.getMessage());
         }
-        catch(Exception e){
-            System.err.print("Retryable error: " + e.getMessage());
-            throw new RetryableException(e.getMessage()); // Will be retried based on Kafka configuration
-        }
+    }
+
+    private boolean isDuplicateEvent(org.springframework.dao.DataIntegrityViolationException ex) {
+        return ex.getMessage() != null &&
+                ex.getMessage().contains("unique_event_id");
     }
 }
