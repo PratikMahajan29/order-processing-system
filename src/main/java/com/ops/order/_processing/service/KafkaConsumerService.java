@@ -2,6 +2,8 @@ package com.ops.order._processing.service;
 
 import com.ops.order._processing.entity.Order;
 import com.ops.order._processing.event.OrderEvent;
+import com.ops.order._processing.exception.NonRetryableException;
+import com.ops.order._processing.exception.RetryableException;
 import com.ops.order._processing.repository.OrderRepository;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
@@ -22,13 +24,12 @@ public class KafkaConsumerService {
     @KafkaListener(topics = "order-topic", groupId = "order-group")
     public void consume(OrderEvent event, Acknowledgment ack) {
 
+        System.out.println("Processing event: " + event.getEventId());
+
         try {
-             // Maintain the idempotency by checking if the event has already been processed
-            Optional<Order> existing  = orderRepository.findByEventId(event.getEventId());
-            if(existing.isPresent()){
-                System.out.print("Duplicate Event ignored: " + event.getEventId());
-                ack.acknowledge(); // Acknowledge to avoid reprocessing
-                return;
+
+            if(event.getQuantity() <= 0){
+                throw new NonRetryableException("Invalid quantity: " + event.getQuantity());
             }
 
             Order order = new Order();
@@ -41,10 +42,28 @@ public class KafkaConsumerService {
 
             orderRepository.save(order);
 
-            ack.acknowledge(); // ---> This tells kafka that marks message as processed.
+            ack.acknowledge(); // ---> This tells kafka that mark message as processed.
+
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+
+            if (isDuplicateEvent(ex)) {
+                System.out.println("Duplicate event ignored: " + event.getEventId());
+                ack.acknowledge(); //  treat duplicate as success
+            } else {
+                throw new RetryableException("Retryable error: " + ex);
+            }
+
+        } catch (NonRetryableException e) {
+            throw e;
 
         } catch (Exception e) {
-            System.out.println("Error processing message: " + e.getMessage());
+            System.out.println("Retry triggered for: " + event.getEventId() + " due to: " + e.getMessage());
+            throw new RetryableException(e.getMessage());
         }
+    }
+
+    private boolean isDuplicateEvent(org.springframework.dao.DataIntegrityViolationException ex) {
+        return ex.getMessage() != null &&
+                ex.getMessage().contains("unique_event_id");
     }
 }
