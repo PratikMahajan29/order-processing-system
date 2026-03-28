@@ -28,30 +28,34 @@ public class KafkaConsumerService {
 
         try {
 
-            if(event.getQuantity() <= 0){
-                throw new NonRetryableException("Invalid quantity: " + event.getQuantity());
+            //  Fetch existing order
+            Order order = orderRepository.findByOrderId(event.getOrderId())
+                    .orElseThrow(() -> new RetryableException("Order not found"));
+
+            // Move to PROCESSING
+            order.setStatus("PROCESSING");
+            order.setUpdatedAt(LocalDateTime.now());
+            orderRepository.save(order);
+
+            // Business validation (NO DLQ)
+            if (order.getQuantity() <= 0) {
+                order.setStatus("FAILED");
+                order.setFailureReason("Invalid quantity: " + order.getQuantity());
+                order.setUpdatedAt(LocalDateTime.now());
+
+                orderRepository.save(order);
+
+                ack.acknowledge();
+                return;
             }
 
-            Order order = new Order();
-            order.setEventId(event.getEventId());
-            order.setProductName(event.getProductName());
-            order.setQuantity(event.getQuantity());
-            order.setStatus(event.getStatus());
-            order.setCreatedAt(LocalDateTime.now());
+            // Success
+            order.setStatus("COMPLETED");
             order.setUpdatedAt(LocalDateTime.now());
 
             orderRepository.save(order);
 
-            ack.acknowledge(); // ---> This tells kafka that mark message as processed.
-
-        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
-
-            if (isDuplicateEvent(ex)) {
-                System.out.println("Duplicate event ignored: " + event.getEventId());
-                ack.acknowledge(); //  treat duplicate as success
-            } else {
-                throw new RetryableException("Retryable error: " + ex);
-            }
+            ack.acknowledge();
 
         } catch (NonRetryableException e) {
             throw e;
@@ -60,10 +64,5 @@ public class KafkaConsumerService {
             System.out.println("Retry triggered for: " + event.getEventId() + " due to: " + e.getMessage());
             throw new RetryableException(e.getMessage());
         }
-    }
-
-    private boolean isDuplicateEvent(org.springframework.dao.DataIntegrityViolationException ex) {
-        return ex.getMessage() != null &&
-                ex.getMessage().contains("unique_event_id");
     }
 }

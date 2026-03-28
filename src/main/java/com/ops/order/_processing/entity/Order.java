@@ -1,6 +1,5 @@
 package com.ops.order._processing.entity;
 
-
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
@@ -12,6 +11,10 @@ public class Order {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "order_id")
+    private String orderId;
+
+    @Column(name = "event_id")
     private String eventId;
 
     private String productName;
@@ -20,6 +23,9 @@ public class Order {
 
     private String status;
 
+    @Column(name = "failure_reason")
+    private String failureReason;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
@@ -27,63 +33,47 @@ public class Order {
     // Constructors
     public Order() {}
 
-    public Order(String eventId, String productName, Integer quantity, String status) {
+    public Order(String orderId, String eventId, String productName, Integer quantity, String status) {
+        this.orderId = orderId;
         this.eventId = eventId;
         this.productName = productName;
         this.quantity = quantity;
         this.status = status;
     }
 
-    // Getters and Setters
-    public Long getId() {
-        return id;
-    }
+    // Getters & Setters
 
-    public void setId(Long id) {
-        this.id = id;
-    }
+    public Long getId() { return id; }
 
-    public String getProductName() {
-        return productName;
-    }
+    public String getOrderId() { return orderId; }
 
-    public void setProductName(String productName) {
-        this.productName = productName;
-    }
+    public void setOrderId(String orderId) { this.orderId = orderId; }
 
-    public Integer getQuantity() {
-        return quantity;
-    }
+    public String getEventId() { return eventId; }
 
-    public void setQuantity(Integer quantity) {
-        this.quantity = quantity;
-    }
+    public void setEventId(String eventId) { this.eventId = eventId; }
 
-    public String getStatus() {
-        return status;
-    }
+    public String getProductName() { return productName; }
 
-    public void setStatus(String status) {
-        this.status = status;
-    }
+    public void setProductName(String productName) { this.productName = productName; }
 
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
+    public Integer getQuantity() { return quantity; }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
+    public void setQuantity(Integer quantity) { this.quantity = quantity; }
 
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
+    public String getStatus() { return status; }
 
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
-    }
+    public void setStatus(String status) { this.status = status; }
 
-    public String getEventId() {return eventId;}
+    public String getFailureReason() { return failureReason; }
 
-    public void setEventId(String eventId) {this.eventId = eventId;}
+    public void setFailureReason(String failureReason) { this.failureReason = failureReason; }
+
+    public LocalDateTime getCreatedAt() { return createdAt; }
+
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }
