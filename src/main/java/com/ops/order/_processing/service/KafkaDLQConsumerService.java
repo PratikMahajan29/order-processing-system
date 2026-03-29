@@ -36,6 +36,7 @@ public class KafkaDLQConsumerService {
             failedEvent.setPayload(objectMapper.writeValueAsString(event));
             failedEvent.setExceptionType(exceptionType);
             failedEvent.setErrorMessage(errorMessage);
+            failedEvent.setRetryCount(0);
             failedEvent.setStatus("FAILED");
             failedEvent.setCreatedAt(LocalDateTime.now());
             failedEvent.setUpdatedAt(LocalDateTime.now());

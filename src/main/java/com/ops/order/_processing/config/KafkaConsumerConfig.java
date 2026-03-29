@@ -74,12 +74,6 @@ public class KafkaConsumerConfig {
 
         FixedBackOff backOff = new FixedBackOff(2000L, 3);
 
-//        ExponentialBackOff backOff = new ExponentialBackOff();
-//        backOff.setInitialInterval(1000L);
-//        backOff.setMultiplier(2.0);
-//        backOff.setMaxInterval(10000L);
-//        backOff.setMaxElapsedTime(30000L);
-
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, backOff);
 
         // This tells the error handler to not retry when NonRetryableException is thrown and directly send the message to DLQ.

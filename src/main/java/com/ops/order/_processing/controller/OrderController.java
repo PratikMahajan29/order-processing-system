@@ -27,8 +27,12 @@ public class OrderController {
     public ResponseEntity<?> createOrder(@RequestBody OrderRequestDTO dto) {
 
         Order order = orderService.createOrder(dto);
-        return ResponseEntity.ok(Map.of("OrderId",order.getOrderId(),
-                "status",order.getStatus(),"failureReason",order.getFailureReason()));
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("orderId", order.getOrderId());
+        response.put("status", order.getStatus());
+
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{orderId}")
@@ -42,6 +46,15 @@ public class OrderController {
         response.put("failureReason", order.getFailureReason());
 
         return ResponseEntity.ok(response);
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<?> handleBadRequest(Exception e) {
+
+        Map<String, Object> error = new HashMap<>();
+        error.put("error", e.getMessage());
+
+        return ResponseEntity.badRequest().body(error);
     }
 
     @PostMapping("/reprocess/{eventId}")

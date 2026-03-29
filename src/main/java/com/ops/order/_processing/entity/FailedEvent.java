@@ -19,6 +19,8 @@ public class FailedEvent {
 
     private String status; // FAILED / REPROCESSED
 
+    private int retryCount;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -77,5 +79,13 @@ public class FailedEvent {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public int getRetryCount() {
+        return retryCount;
+    }
+
+    public void setRetryCount(int retryCount) {
+        this.retryCount = retryCount;
     }
 }

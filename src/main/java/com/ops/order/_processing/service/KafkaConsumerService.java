@@ -57,10 +57,7 @@ public class KafkaConsumerService {
 
             ack.acknowledge();
 
-        } catch (NonRetryableException e) {
-            throw e;
-
-        } catch (Exception e) {
+        }catch (Exception e) {
             System.out.println("Retry triggered for: " + event.getEventId() + " due to: " + e.getMessage());
             throw new RetryableException(e.getMessage());
         }
