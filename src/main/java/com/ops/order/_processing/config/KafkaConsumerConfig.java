@@ -13,7 +13,6 @@ import org.apache.kafka.common.TopicPartition;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
-import org.springframework.util.backoff.ExponentialBackOff;
 import org.springframework.util.backoff.FixedBackOff;
 
 
@@ -66,19 +65,14 @@ public class KafkaConsumerConfig {
             org.apache.kafka.common.header.internals.RecordHeaders headers =
                     new org.apache.kafka.common.header.internals.RecordHeaders();
 
-            headers.add("error-message", ex.getMessage().getBytes());
-            headers.add("exception-type", ex.getClass().getSimpleName().getBytes());
+            Throwable root = ex.getCause() != null ? ex.getCause() : ex;
 
+            headers.add("exception-type", root.getClass().getSimpleName().getBytes());
+            headers.add("error-message", root.getMessage().getBytes());
             return headers;
         });
 
         FixedBackOff backOff = new FixedBackOff(2000L, 3);
-
-//        ExponentialBackOff backOff = new ExponentialBackOff();
-//        backOff.setInitialInterval(1000L);
-//        backOff.setMultiplier(2.0);
-//        backOff.setMaxInterval(10000L);
-//        backOff.setMaxElapsedTime(30000L);
 
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, backOff);
 

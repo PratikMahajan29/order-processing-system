@@ -1,4 +1,3 @@
-target/
 *.log
 *.class
 *.jar
@@ -6,11 +5,7 @@ target/
 *.iml
 .idea/
 .vscode/
-.env 
-/mvnw.cmd
-/mvnw
+.env
 /HELP.md
 /.gitattributes
-/src/test/
-/src/main/resources/application.properties
 /.mvn/

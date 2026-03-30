@@ -1,7 +1,5 @@
 package com.ops.order._processing.event;
 
-import java.util.UUID;
-
 public class OrderEvent {
 
     private String eventId;
@@ -12,15 +10,18 @@ public class OrderEvent {
 
     private String status;
 
+    private String orderId;
+
     // Constructors
     public OrderEvent() {
     }
 
-    public OrderEvent(String eventId,String productName, Integer quantity, String status) {
+    public OrderEvent(String eventId,String productName, Integer quantity, String status,String orderId) {
         this.eventId = eventId;
         this.productName = productName;
         this.quantity = quantity;
         this.status = status;
+        this.setOrderId(orderId);
     }
 
     // Getters and Setters
@@ -57,6 +58,14 @@ public class OrderEvent {
         this.status = status;
     }
 
+    public String getOrderId() {
+        return orderId;
+    }
+
+    public void setOrderId(String orderId) {
+        this.orderId = orderId;
+    }
+
     @Override
     public String toString() {
         return "OrderEvent{" +
@@ -64,8 +73,10 @@ public class OrderEvent {
                 ", quantity=" + quantity +
                 ", status='" + status + '\'' +
                 ", eventId='" + eventId + '\'' +
+                ", orderId='" + getOrderId() + '\'' +
                 '}';
     }
+
 
 
 }

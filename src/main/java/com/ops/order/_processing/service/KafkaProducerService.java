@@ -17,4 +17,9 @@ public class KafkaProducerService {
     public void sendOrderEvent(OrderEvent event) {
         kafkaTemplate.send("order-topic", event.getEventId(), event);
     }
+
+    public void sendToMainTopic(OrderEvent event) {
+        kafkaTemplate.send("order-topic", event.getEventId(), event);
+        System.out.println("Reprocessing event sent to main topic: " + event.getEventId());
+    }
 }

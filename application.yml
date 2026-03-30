@@ -1,13 +1,14 @@
 spring:
   datasource:
     hikari:
-      connection-timeout: 3000
-      validation-timeout: 2000
+      connection-timeout: 2000   # fail fast (2 sec)
+      validation-timeout: 1000   # connection check timeout
+      maximum-pool-size: 5       # keep small for testing
   kafka:
     consumer:
       bootstrap-servers: localhost:9092
       group-id: order-group
-      auto-offset-reset: earliest
+      auto-offset-reset: latest  // sees only new messages, not old ones
       enable-auto-commit: false
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
