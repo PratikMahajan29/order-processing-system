@@ -21,6 +21,8 @@ public class FailedEvent {
 
     private int retryCount;
 
+    private LocalDateTime nextRetryAt;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -87,5 +89,13 @@ public class FailedEvent {
 
     public void setRetryCount(int retryCount) {
         this.retryCount = retryCount;
+    }
+
+    public LocalDateTime getNextRetryAt() {
+        return nextRetryAt;
+    }
+
+    public void setNextRetryAt(LocalDateTime nextRetryAt) {
+        this.nextRetryAt = nextRetryAt;
     }
 }

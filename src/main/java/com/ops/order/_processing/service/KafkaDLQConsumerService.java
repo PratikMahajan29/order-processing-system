@@ -37,6 +37,7 @@ public class KafkaDLQConsumerService {
             failedEvent.setExceptionType(exceptionType);
             failedEvent.setErrorMessage(errorMessage);
             failedEvent.setRetryCount(0);
+            failedEvent.setNextRetryAt(LocalDateTime.now().plusSeconds(10)); // Schedule next retry after 10 secs
             failedEvent.setStatus("FAILED");
             failedEvent.setCreatedAt(LocalDateTime.now());
             failedEvent.setUpdatedAt(LocalDateTime.now());

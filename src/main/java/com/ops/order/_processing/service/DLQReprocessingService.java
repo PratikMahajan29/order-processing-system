@@ -11,6 +11,8 @@ import com.ops.order._processing.repository.OutboxEventRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class DLQReprocessingService {
@@ -46,20 +48,34 @@ public class DLQReprocessingService {
             );
 
             // Fetch order
-            Order order = orderRepository.findByOrderId(event.getOrderId())
-                    .orElseThrow(() -> new RuntimeException("Order not found"));
+            Optional<Order> orderOpt = orderRepository.findByOrderId(event.getOrderId());
 
-            // State check (CRITICAL)
+            if (orderOpt.isEmpty()) {
+
+                System.out.println("Order not found for event: " + eventId);
+
+                handleRetryUpdate(failedEvent);
+                return;
+            }
+
+            Order order = orderOpt.get();
+
+
+            //  ORDER ALREADY COMPLETED
+
             if ("COMPLETED".equalsIgnoreCase(order.getStatus())) {
 
                 System.out.println("Skipping reprocess. Order already COMPLETED: " + order.getOrderId());
 
                 failedEvent.setStatus("IGNORED");
                 failedEvent.setUpdatedAt(LocalDateTime.now());
-                failedEventRepository.save(failedEvent);
 
+                failedEventRepository.save(failedEvent);
                 return;
             }
+
+
+            //MAX RETRIES ALREADY REACHED
 
             if (failedEvent.getRetryCount() >= MAX_RETRIES) {
 
@@ -72,7 +88,8 @@ public class DLQReprocessingService {
                 return;
             }
 
-            // Create NEW outbox event (retry)
+            //  VALID RETRY → PUSH TO OUTBOX
+
             OutboxEvent outboxEvent = new OutboxEvent(
                     event.getEventId(),
                     event.getOrderId(),
@@ -80,19 +97,56 @@ public class DLQReprocessingService {
                     "NEW"
             );
 
-            outboxEventRepository.save(outboxEvent); // ----> Event saved in outbox
-
-            //  Update failed event status
-            failedEvent.setRetryCount(failedEvent.getRetryCount() + 1);
-            failedEvent.setStatus("RETRYING");
-            failedEvent.setUpdatedAt(LocalDateTime.now());
-
-            failedEventRepository.save(failedEvent);
+            outboxEventRepository.save(outboxEvent);
 
             System.out.println("Reprocessing scheduled via Outbox for eventId: " + eventId);
+
+            //  Update retry state
+            handleRetryUpdate(failedEvent);
 
         } catch (Exception e) {
             throw new RuntimeException("Reprocessing failed: " + e.getMessage(), e);
         }
+    }
+
+    //  CENTRALIZED RETRY LOGIC (NO DUPLICATION)
+
+    private void handleRetryUpdate(FailedEvent failedEvent) {
+
+        int newRetryCount = failedEvent.getRetryCount() + 1;
+
+        //  ALWAYS update retry count
+        failedEvent.setRetryCount(newRetryCount);
+
+        if (newRetryCount >= MAX_RETRIES) {
+
+            failedEvent.setStatus("DEAD");
+
+        } else {
+
+            failedEvent.setStatus("FAILED");
+            failedEvent.setNextRetryAt(calculateNextRetryTime(newRetryCount));
+        }
+
+        failedEvent.setUpdatedAt(LocalDateTime.now());
+        failedEventRepository.save(failedEvent);
+    }
+
+
+    //  EXPONENTIAL BACKOFF + JITTER
+
+    private LocalDateTime calculateNextRetryTime(int retryCount) {
+
+        int baseDelaySeconds = 10;
+
+        long exponentialDelay = (long) (baseDelaySeconds * Math.pow(2, retryCount));
+
+        //  Thread-safe jitter (0 → 50% of delay)
+        long jitter = ThreadLocalRandom.current()
+                .nextLong(0, Math.max(1, exponentialDelay / 2));
+
+        long finalDelay = exponentialDelay + jitter;
+
+        return LocalDateTime.now().plusSeconds(finalDelay);
     }
 }

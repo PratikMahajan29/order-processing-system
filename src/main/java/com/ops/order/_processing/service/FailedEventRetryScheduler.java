@@ -5,6 +5,7 @@ import com.ops.order._processing.repository.FailedEventRepository;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -25,7 +26,8 @@ public class FailedEventRetryScheduler {
     public void retryFailedEvents() {
 
         List<FailedEvent> events =
-                failedEventRepository.findByStatusAndRetryCountLessThan("FAILED", MAX_RETRIES);
+                failedEventRepository.findByStatusAndRetryCountLessThanAndNextRetryAtBefore("FAILED",
+                        MAX_RETRIES, LocalDateTime.now());
 
         for (FailedEvent event : events) {
             try {
