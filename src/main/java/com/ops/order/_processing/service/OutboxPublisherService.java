@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ops.order._processing.entity.OutboxEvent;
 import com.ops.order._processing.event.OrderEvent;
 import com.ops.order._processing.repository.OutboxEventRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -25,6 +27,7 @@ public class OutboxPublisherService {
         this.objectMapper = objectMapper;
     }
 
+    private static final Logger log = LoggerFactory.getLogger(OutboxPublisherService.class);
     //  Runs every 5 seconds
     @Scheduled(fixedDelay = 5000)
     public void publishOutboxEvents() {
@@ -43,7 +46,7 @@ public class OutboxPublisherService {
                 // Send to Kafka
                 kafkaProducerService.sendOrderEvent(event);
 
-                System.out.print("Kafka event sent");
+                log.info("Kafka event sent: " + event.getEventId());
 
                 //  Mark as SENT
                 outboxEvent.setStatus("SENT");
@@ -51,12 +54,11 @@ public class OutboxPublisherService {
 
                 outboxEventRepository.save(outboxEvent);
 
-                System.out.println("Outbox event sent: " + outboxEvent.getEventId());
+                log.info("Outbox event sent: " + outboxEvent.getEventId());
 
             } catch (Exception e) {
 
-                System.out.println("Failed to publish outbox event: "
-                        + outboxEvent.getEventId() + " due to: " + e.getMessage());
+                log.info("Failed to publish outbox event: " + outboxEvent.getEventId() + " due to: " + e.getMessage());
 
                 // do NOT mark as SENT
                 // it will retry automatically

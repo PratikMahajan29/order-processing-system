@@ -5,6 +5,8 @@ import com.ops.order._processing.entity.FailedEvent;
 import com.ops.order._processing.event.OrderEvent;
 import com.ops.order._processing.repository.FailedEventRepository;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 
@@ -21,6 +23,8 @@ public class KafkaDLQConsumerService {
         this.failedEventRepository = failedEventRepository;
         this.objectMapper = objectMapper;
     }
+
+    private static final Logger log = LoggerFactory.getLogger(KafkaDLQConsumerService.class);
 
     @KafkaListener(topics = "order-topic-dlq", groupId = "order-dlq-group")
     public void consumeDLQ(ConsumerRecord<String, OrderEvent> record) {
@@ -45,7 +49,7 @@ public class KafkaDLQConsumerService {
             failedEventRepository.save(failedEvent);
 
         } catch (Exception e) {
-            System.out.println("Failed to persist DLQ event: " + e.getMessage());
+            log.info("Failed to persist DLQ event: " + e.getMessage());
         }
 
         System.out.println("========== DLQ MESSAGE RECEIVED ==========");

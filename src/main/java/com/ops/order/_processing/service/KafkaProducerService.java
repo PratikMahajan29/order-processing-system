@@ -1,9 +1,10 @@
 package com.ops.order._processing.service;
 
-import ch.qos.logback.core.net.SyslogOutputStream;
 import com.ops.order._processing.event.OrderEvent;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.slf4j.MDC;
 
 @Service
 public class KafkaProducerService {
@@ -15,7 +16,17 @@ public class KafkaProducerService {
     }
 
     public void sendOrderEvent(OrderEvent event) {
-        kafkaTemplate.send("order-topic", event.getEventId(), event);
+
+        String correlationId = MDC.get("correlationId");
+
+        ProducerRecord<String, OrderEvent> record =
+                new ProducerRecord<>("order-topic", event.getEventId(), event);
+
+        if (correlationId != null) {
+            record.headers().add("correlationId", correlationId.getBytes());
+        }
+
+        kafkaTemplate.send(record);
     }
 
     public void sendToMainTopic(OrderEvent event) {

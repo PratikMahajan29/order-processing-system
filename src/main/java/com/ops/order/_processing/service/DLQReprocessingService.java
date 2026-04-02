@@ -8,6 +8,8 @@ import com.ops.order._processing.event.OrderEvent;
 import com.ops.order._processing.repository.FailedEventRepository;
 import com.ops.order._processing.repository.OrderRepository;
 import com.ops.order._processing.repository.OutboxEventRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -21,7 +23,7 @@ public class DLQReprocessingService {
     private final OrderRepository orderRepository;
     private final OutboxEventRepository outboxEventRepository;
     private final ObjectMapper objectMapper;
-
+    private static final Logger log = LoggerFactory.getLogger(DLQReprocessingService.class);
     private static final int MAX_RETRIES = 3;
 
     public DLQReprocessingService(FailedEventRepository failedEventRepository,
@@ -52,7 +54,7 @@ public class DLQReprocessingService {
 
             if (orderOpt.isEmpty()) {
 
-                System.out.println("Order not found for event: " + eventId);
+                log.info("Order not found for event: " + eventId);
 
                 handleRetryUpdate(failedEvent);
                 return;
@@ -64,8 +66,7 @@ public class DLQReprocessingService {
             //  ORDER ALREADY COMPLETED
 
             if ("COMPLETED".equalsIgnoreCase(order.getStatus())) {
-
-                System.out.println("Skipping reprocess. Order already COMPLETED: " + order.getOrderId());
+                log.info("Skipping reprocess. Order already COMPLETED: " + order.getOrderId());
 
                 failedEvent.setStatus("IGNORED");
                 failedEvent.setUpdatedAt(LocalDateTime.now());
@@ -79,7 +80,7 @@ public class DLQReprocessingService {
 
             if (failedEvent.getRetryCount() >= MAX_RETRIES) {
 
-                System.out.println("Max retries reached for event: " + eventId);
+                log.info("Max retries reached for event: " + eventId);
 
                 failedEvent.setStatus("DEAD");
                 failedEvent.setUpdatedAt(LocalDateTime.now());
@@ -98,8 +99,7 @@ public class DLQReprocessingService {
             );
 
             outboxEventRepository.save(outboxEvent);
-
-            System.out.println("Reprocessing scheduled via Outbox for eventId: " + eventId);
+            log.info("Reprocessing scheduled via Outbox for eventId: " + eventId);
 
             //  Update retry state
             handleRetryUpdate(failedEvent);
