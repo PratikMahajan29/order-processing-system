@@ -12,6 +12,7 @@ public class OrderEvent {
 
     private String orderId;
 
+
     // Constructors
     public OrderEvent() {
     }
@@ -21,7 +22,7 @@ public class OrderEvent {
         this.productName = productName;
         this.quantity = quantity;
         this.status = status;
-        this.setOrderId(orderId);
+        this.orderId = orderId;
     }
 
     // Getters and Setters
@@ -65,6 +66,7 @@ public class OrderEvent {
     public void setOrderId(String orderId) {
         this.orderId = orderId;
     }
+
 
     @Override
     public String toString() {

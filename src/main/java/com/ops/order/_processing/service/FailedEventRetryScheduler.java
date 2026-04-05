@@ -2,6 +2,8 @@ package com.ops.order._processing.service;
 
 import com.ops.order._processing.entity.FailedEvent;
 import com.ops.order._processing.repository.FailedEventRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -22,6 +24,9 @@ public class FailedEventRetryScheduler {
         this.reprocessingService = reprocessingService;
     }
 
+    private static final Logger log = LoggerFactory.getLogger(FailedEventRetryScheduler.class);
+
+
     @Scheduled(fixedDelay = 10000) // every 10 seconds
     public void retryFailedEvents() {
 
@@ -31,12 +36,12 @@ public class FailedEventRetryScheduler {
 
         for (FailedEvent event : events) {
             try {
-                System.out.println("Retrying event: " + event.getEventId());
+                log.info("Retrying event: " + event.getEventId());
 
                 reprocessingService.reprocessById(event.getEventId());
 
             } catch (Exception e) {
-                System.out.println("Retry failed for event: " + event.getEventId());
+                log.info("Retry failed for event: " + event.getEventId() + ", error: " + e.getMessage());
             }
         }
     }
