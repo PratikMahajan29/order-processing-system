@@ -20,7 +20,7 @@ public class KafkaProducerService {
         String correlationId = MDC.get("correlationId");
 
         ProducerRecord<String, OrderEvent> record =
-                new ProducerRecord<>("order-topic", event.getEventId(), event);
+                new ProducerRecord<>("order-topic", event.getOrderId(), event);
 
         if (correlationId != null) {
             record.headers().add("correlationId", correlationId.getBytes());
@@ -30,7 +30,7 @@ public class KafkaProducerService {
     }
 
     public void sendToMainTopic(OrderEvent event) {
-        kafkaTemplate.send("order-topic", event.getEventId(), event);
-        System.out.println("Reprocessing event sent to main topic: " + event.getEventId());
+        kafkaTemplate.send("order-topic", event.getOrderId(), event);
+        System.out.println("Reprocessing event sent to main topic: " + event.getOrderId());
     }
 }

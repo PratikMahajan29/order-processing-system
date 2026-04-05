@@ -60,7 +60,7 @@ public class OrderService {
 
         orderRepository.save(order);
 
-        log.info("Order created with ID: {}", orderId);
+        log.info("Order created with ID: {}", order.getOrderId());
 
         try {
             // Create event
@@ -83,7 +83,7 @@ public class OrderService {
 
             outboxEventRepository.save(outboxEvent);
 
-            log.info("Outbox event created with ID: {}", eventId);
+            log.info("Outbox event created with ID: {}", event.getEventId());
 
         } catch (Exception e) {
             throw new RuntimeException("Failed to serialize event", e);

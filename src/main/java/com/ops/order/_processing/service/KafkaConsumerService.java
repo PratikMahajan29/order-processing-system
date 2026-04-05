@@ -19,30 +19,47 @@ public class KafkaConsumerService {
 
     private final OrderRepository orderRepository;
     private final ProcessedEventService processedEventService;
-
-    public KafkaConsumerService(OrderRepository orderRepository,ProcessedEventService processedEventService) {
-        this.orderRepository = orderRepository;
-        this.processedEventService = processedEventService;
-    }
+    private final MetricsService metricsService;
 
     private static final Logger log = LoggerFactory.getLogger(KafkaConsumerService.class);
 
+    public KafkaConsumerService(OrderRepository orderRepository,
+                                ProcessedEventService processedEventService,
+                                MetricsService metricsService) {
+        this.orderRepository = orderRepository;
+        this.processedEventService = processedEventService;
+        this.metricsService = metricsService;
+    }
+
     @KafkaListener(topics = "order-topic", groupId = "order-group")
     public void consume(ConsumerRecord<String, OrderEvent> record, Acknowledgment ack) {
+
+        String thread = Thread.currentThread().getName();
+        long startTime = System.currentTimeMillis();
 
         String correlationId = getHeader(record, "correlationId");
         MDC.put("correlationId", correlationId);
 
         OrderEvent event = record.value();
 
+        log.info("START | orderId={} | eventId={} | partition={} | thread={} | time={}",
+                event.getOrderId(),
+                event.getEventId(),
+                record.partition(),
+                thread,
+                startTime);
+
         try {
-            log.info("START processing eventId={}, orderId={}",
-                    event.getEventId(), event.getOrderId());
+            // Simulate processing delay
+            Thread.sleep(2000);
+
+            metricsService.IncrementTotal();
 
             boolean shouldProcess = processedEventService.tryStartProcessing(event.getEventId());
 
             if (!shouldProcess) {
-                log.info("SKIP duplicate eventId={}", event.getEventId());
+                log.info("SKIP duplicate | eventId={} | thread={}", event.getEventId(), thread);
+                metricsService.incrementDuplicate();
                 ack.acknowledge();
                 return;
             }
@@ -54,7 +71,6 @@ public class KafkaConsumerService {
             order.setUpdatedAt(LocalDateTime.now());
             orderRepository.save(order);
 
-            //  Business validation
             if (order.getQuantity() <= 0) {
 
                 order.setStatus("FAILED");
@@ -63,36 +79,58 @@ public class KafkaConsumerService {
                 orderRepository.save(order);
 
                 processedEventService.markCompleted(event.getEventId());
+                metricsService.incrementFailure();
 
-                log.warn("FAILED business validation eventId={}, orderId={}",
-                        event.getEventId(), event.getOrderId());
+                log.warn("FAILED validation | eventId={} | orderId={} | thread={}",
+                        event.getEventId(), event.getOrderId(), thread);
 
                 ack.acknowledge();
                 return;
             }
 
-            //  Success
             order.setStatus("COMPLETED");
             order.setUpdatedAt(LocalDateTime.now());
             orderRepository.save(order);
 
             processedEventService.markCompleted(event.getEventId());
+            metricsService.incrementSuccess();
 
-            log.info("SUCCESS eventId={}, orderId={}",
-                    event.getEventId(), event.getOrderId());
+            log.info("SUCCESS | eventId={} | orderId={} | thread={}",
+                    event.getEventId(), event.getOrderId(), thread);
 
             ack.acknowledge();
 
         } catch (Exception e) {
 
-            log.error("FAIL eventId={}, error={}",
-                    event.getEventId(), e.getMessage(), e);
+            log.error("ERROR | eventId={} | thread={} | error={}",
+                    event.getEventId(), thread, e.getMessage(), e);
 
-            throw new RetryableException(e.getMessage());
+            metricsService.incrementFailure();
+
+            if (isRetryable(e)) {
+                metricsService.incrementRetry();
+                throw (RetryableException) e;
+            }
+
+            processedEventService.markCompleted(event.getEventId());
+            ack.acknowledge();
 
         } finally {
+            long endTime = System.currentTimeMillis();
+
+            log.info("END | orderId={} | eventId={} | thread={} | duration={}ms | endTime={}",
+                    event.getOrderId(),
+                    event.getEventId(),
+                    thread,
+                    (endTime - startTime),
+                    endTime);
+
             MDC.clear();
         }
+    }
+
+    private boolean isRetryable(Exception e) {
+        return e instanceof RetryableException;
     }
 
     private String getHeader(ConsumerRecord<String, OrderEvent> record, String key) {
