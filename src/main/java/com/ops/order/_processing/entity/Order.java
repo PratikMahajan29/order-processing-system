@@ -11,11 +11,8 @@ public class Order {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "order_id")
+    @Column(name = "order_id",unique = true)
     private String orderId;
-
-    @Column(name = "event_id")
-    private String eventId;
 
     private String productName;
 
@@ -30,28 +27,25 @@ public class Order {
 
     private LocalDateTime updatedAt;
 
+    @Column(name = "event_sequence")
+    private Long eventSequence = 0L;  //
+
     // Constructors
     public Order() {}
 
-    public Order(String orderId, String eventId, String productName, Integer quantity, String status) {
+    public Order(String orderId, String productName, Integer quantity, String status,Long eventSequence) {
         this.orderId = orderId;
-        this.eventId = eventId;
         this.productName = productName;
         this.quantity = quantity;
         this.status = status;
+        this.eventSequence = eventSequence;
     }
-
-    // Getters & Setters
 
     public Long getId() { return id; }
 
     public String getOrderId() { return orderId; }
 
     public void setOrderId(String orderId) { this.orderId = orderId; }
-
-    public String getEventId() { return eventId; }
-
-    public void setEventId(String eventId) { this.eventId = eventId; }
 
     public String getProductName() { return productName; }
 
@@ -76,4 +70,12 @@ public class Order {
     public LocalDateTime getUpdatedAt() { return updatedAt; }
 
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public Long getEventSequence() {
+        return eventSequence;
+    }
+
+    public void setEventSequence(Long eventSequence) {
+        this.eventSequence = eventSequence;
+    }
 }

@@ -73,7 +73,7 @@ public class KafkaConsumerConfig {
             return headers;
         });
 
-        FixedBackOff backOff = new FixedBackOff(2000L, 3);
+        FixedBackOff backOff = new FixedBackOff(0L, 0L); // No retries, immediately send to DLQ
 
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, backOff);
 

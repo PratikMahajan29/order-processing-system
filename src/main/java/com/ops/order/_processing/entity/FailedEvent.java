@@ -23,6 +23,8 @@ public class FailedEvent {
 
     private LocalDateTime nextRetryAt;
 
+    private String failureType; // ORDER / TRANSIENT / POISON
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -97,5 +99,13 @@ public class FailedEvent {
 
     public void setNextRetryAt(LocalDateTime nextRetryAt) {
         this.nextRetryAt = nextRetryAt;
+    }
+
+    public String getFailureType() {
+        return failureType;
+    }
+
+    public void setFailureType(String failureType) {
+        this.failureType = failureType;
     }
 }

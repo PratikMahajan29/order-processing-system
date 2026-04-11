@@ -1,5 +1,6 @@
 package com.ops.order._processing.controller;
 
+import com.ops.order._processing.dto.EventRequestDTO;
 import com.ops.order._processing.dto.OrderRequestDTO;
 import com.ops.order._processing.entity.Order;
 import com.ops.order._processing.service.DLQReprocessingService;
@@ -54,6 +55,21 @@ public class OrderController {
             @RequestBody OrderRequestDTO dto) {
 
         Object response = orderService.createOrderWithIdempotency(key, dto);
+
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{orderId}/events")
+    public ResponseEntity<?> publishEvent(
+            @RequestHeader("Idempotency-Key") String key,
+            @PathVariable String orderId,
+            @RequestBody EventRequestDTO request) {
+
+        Object response = orderService.publishEventWithIdempotency(
+                key,
+                orderId,
+                request.getEventType()
+        );
 
         return ResponseEntity.ok(response);
     }

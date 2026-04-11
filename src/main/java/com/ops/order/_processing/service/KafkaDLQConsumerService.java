@@ -42,6 +42,14 @@ public class KafkaDLQConsumerService {
             failedEvent.setErrorMessage(errorMessage);
             failedEvent.setRetryCount(0);
             failedEvent.setNextRetryAt(LocalDateTime.now().plusSeconds(10)); // Schedule next retry after 10 secs
+
+            String failureType = "TRANSIENT"; // default
+
+            if ("RetryableException".equals(exceptionType)) {
+                failureType = "ORDER"; // TEMPORARY assumption (we refine later)
+            }
+
+            failedEvent.setFailureType(failureType);
             failedEvent.setStatus("FAILED");
             failedEvent.setCreatedAt(LocalDateTime.now());
             failedEvent.setUpdatedAt(LocalDateTime.now());
@@ -52,14 +60,14 @@ public class KafkaDLQConsumerService {
             log.info("Failed to persist DLQ event: " + e.getMessage());
         }
 
-        System.out.println("========== DLQ MESSAGE RECEIVED ==========");
-        System.out.println("Event ID       : " + event.getEventId());
-        System.out.println("Product        : " + event.getProductName());
-        System.out.println("Quantity       : " + event.getQuantity());
-        System.out.println("Status         : " + event.getStatus());
-        System.out.println("Exception Type : " + exceptionType);
-        System.out.println("Error Message  : " + errorMessage);
-        System.out.println("==========================================");
+        log.info("========== DLQ MESSAGE RECEIVED ==========");
+        log.info("Event ID       : " + event.getEventId());
+        log.info("Product        : " + event.getProductName());
+        log.info("Quantity       : " + event.getQuantity());
+        log.info("Status         : " + event.getEventType());
+        log.info("Exception Type : " + exceptionType);
+        log.info("Error Message  : " + errorMessage);
+        log.info("==========================================");
     }
 
     private String getHeader(ConsumerRecord<String, OrderEvent> record, String key) {

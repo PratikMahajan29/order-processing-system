@@ -3,26 +3,28 @@ package com.ops.order._processing.event;
 public class OrderEvent {
 
     private String eventId;
+    private String orderId;
+
+    private String eventType;
+    private Long sequence;
+
+    private Long timestamp;
 
     private String productName;
-
     private Integer quantity;
-
-    private String status;
-
-    private String orderId;
 
 
     // Constructors
     public OrderEvent() {
     }
 
-    public OrderEvent(String eventId,String productName, Integer quantity, String status,String orderId) {
+    public OrderEvent(String eventId,String productName, Integer quantity, String eventType,Long sequence,String orderId) {
         this.eventId = eventId;
         this.productName = productName;
         this.quantity = quantity;
-        this.status = status;
         this.orderId = orderId;
+        this.eventType = eventType;
+        this.sequence = sequence;
     }
 
     // Getters and Setters
@@ -51,14 +53,6 @@ public class OrderEvent {
         this.quantity = quantity;
     }
 
-    public String getStatus() {
-        return status;
-    }
-
-    public void setStatus(String status) {
-        this.status = status;
-    }
-
     public String getOrderId() {
         return orderId;
     }
@@ -68,17 +62,42 @@ public class OrderEvent {
     }
 
 
+    public String getEventType() {
+        return eventType;
+    }
+
+    public void setEventType(String eventType) {
+        this.eventType = eventType;
+    }
+
+    public Long getSequence() {
+        return sequence;
+    }
+
+    public void setSequence(Long sequence) {
+        this.sequence = sequence;
+    }
+
+    public Long getTimestamp() {
+        return timestamp;
+    }
+
+    public void setTimestamp(Long timestamp) {
+        this.timestamp = timestamp;
+    }
+
+
     @Override
     public String toString() {
         return "OrderEvent{" +
                 "productName='" + productName + '\'' +
-                ", quantity=" + quantity +
-                ", status='" + status + '\'' +
+                ", quantity=" + quantity + '\'' +
                 ", eventId='" + eventId + '\'' +
-                ", orderId='" + getOrderId() + '\'' +
+                ", orderId='" + orderId + '\'' +
+                ", eventType='" + eventType + '\'' +
+                ", sequence='" + sequence + '\'' +
                 '}';
     }
-
 
 
 }

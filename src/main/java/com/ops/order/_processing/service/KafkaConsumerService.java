@@ -2,6 +2,7 @@ package com.ops.order._processing.service;
 
 import com.ops.order._processing.entity.Order;
 import com.ops.order._processing.event.OrderEvent;
+import com.ops.order._processing.exception.NonRetryableException;
 import com.ops.order._processing.exception.RetryableException;
 import com.ops.order._processing.repository.OrderRepository;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -11,7 +12,8 @@ import org.slf4j.MDC;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Service;
-
+import com.ops.order._processing.enums.OrderStatus;
+import com.ops.order._processing.statemachine.OrderStateMachine;
 import java.time.LocalDateTime;
 
 @Service
@@ -37,7 +39,7 @@ public class KafkaConsumerService {
         String thread = Thread.currentThread().getName();
         long startTime = System.currentTimeMillis();
 
-        String correlationId = getHeader(record, "correlationId");
+        String correlationId = getHeader(record);
         MDC.put("correlationId", correlationId);
 
         OrderEvent event = record.value();
@@ -50,9 +52,6 @@ public class KafkaConsumerService {
                 startTime);
 
         try {
-            // Simulate processing delay
-            Thread.sleep(2000);
-
             metricsService.IncrementTotal();
 
             boolean shouldProcess = processedEventService.tryStartProcessing(event.getEventId());
@@ -64,32 +63,53 @@ public class KafkaConsumerService {
                 return;
             }
 
+
+            // STEP 1: FETCH ORDER
             Order order = orderRepository.findByOrderId(event.getOrderId())
-                    .orElseThrow(() -> new RetryableException("Order not found"));
+                    .orElseThrow(() -> new NonRetryableException("Order not found"));
 
-            order.setStatus("PROCESSING");
-            order.setUpdatedAt(LocalDateTime.now());
-            orderRepository.save(order);
 
-            if (order.getQuantity() <= 0) {
+            // STEP 2: SEQUENCE VALIDATION
+            Long nextSequence = order.getEventSequence() + 1;
 
-                order.setStatus("FAILED");
-                order.setFailureReason("Invalid quantity");
-                order.setUpdatedAt(LocalDateTime.now());
-                orderRepository.save(order);
+            // STEP 3: STATE VALIDATION
+            OrderStatus currentState = OrderStatus.valueOf(order.getStatus());
+            OrderStatus nextState = OrderStatus.valueOf(event.getEventType());
 
-                processedEventService.markCompleted(event.getEventId());
-                metricsService.incrementFailure();
+            int currentOrder = currentState.getOrder();
+            int incomingOrder = nextState.getOrder();
 
-                log.warn("FAILED validation | eventId={} | orderId={} | thread={}",
-                        event.getEventId(), event.getOrderId(), thread);
+            // CASE 1: DUPLICATE / OLD
+            if (incomingOrder <= currentOrder) {
+                log.warn("Duplicate/old event ignored | orderId={} | current={} | incoming={}",
+                        order.getOrderId(), currentState, nextState);
 
+                metricsService.incrementDuplicate();
                 ack.acknowledge();
                 return;
             }
 
-            order.setStatus("COMPLETED");
+            // CASE 2: OUT-OF-ORDER
+            if (incomingOrder > currentOrder + 1) {
+
+                log.warn("Out-of-order event, sending to ORDER BUFFER | orderId={} | current={} | incoming={}",
+                        order.getOrderId(), currentState, nextState);
+
+                // Let it go to DLQ as ORDER type
+                throw new RetryableException("ORDER_VIOLATION");
+            }
+
+            // CASE 3: BUSINESS VALIDATION
+            if (!OrderStateMachine.isValidTransition(currentState, nextState)) {
+                throw new NonRetryableException(
+                        "Invalid business transition: " + currentState + " → " + nextState
+                );
+            }
+
+            order.setStatus(nextState.name());
+            order.setEventSequence(nextSequence);
             order.setUpdatedAt(LocalDateTime.now());
+
             orderRepository.save(order);
 
             processedEventService.markCompleted(event.getEventId());
@@ -109,7 +129,23 @@ public class KafkaConsumerService {
 
             if (isRetryable(e)) {
                 metricsService.incrementRetry();
-                throw (RetryableException) e;
+                throw e; // Let it go to DLQ directly (no Kafka retry)
+            }
+
+            //  NON-RETRYABLE → MARK ORDER AS FAILED
+            try {
+                Order order = orderRepository.findByOrderId(event.getOrderId()).orElse(null);
+
+                if (order != null) {
+                    order.setStatus(OrderStatus.FAILED.name());
+                    order.setFailureReason(e.getMessage());
+                    order.setUpdatedAt(LocalDateTime.now());
+
+                    orderRepository.save(order);
+                }
+
+            } catch (Exception dbEx) {
+                log.error("Failed to update order as FAILED | orderId={}", event.getOrderId(), dbEx);
             }
 
             processedEventService.markCompleted(event.getEventId());
@@ -133,9 +169,9 @@ public class KafkaConsumerService {
         return e instanceof RetryableException;
     }
 
-    private String getHeader(ConsumerRecord<String, OrderEvent> record, String key) {
-        if (record.headers().lastHeader(key) != null) {
-            return new String(record.headers().lastHeader(key).value());
+    private String getHeader(ConsumerRecord<String, OrderEvent> record) {
+        if (record.headers().lastHeader("correlationId") != null) {
+            return new String(record.headers().lastHeader("correlationId").value());
         }
         return "N/A";
     }

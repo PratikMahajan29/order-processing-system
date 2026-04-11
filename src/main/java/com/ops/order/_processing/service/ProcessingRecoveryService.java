@@ -2,6 +2,7 @@ package com.ops.order._processing.service;
 
 import com.ops.order._processing.entity.OutboxEvent;
 import com.ops.order._processing.entity.ProcessedEvent;
+import com.ops.order._processing.exception.NonRetryableException;
 import com.ops.order._processing.repository.OutboxEventRepository;
 import com.ops.order._processing.repository.ProcessedEventRepository;
 import jakarta.transaction.Transactional;
@@ -38,7 +39,7 @@ public class ProcessingRecoveryService {
                     " lastUpdated: " + event.getUpdatedAt());
 
             OutboxEvent outbox = outboxRepo.findByEventId(eventId)
-                    .orElseThrow(() -> new RuntimeException(
+                    .orElseThrow(() -> new NonRetryableException(
                             "CRITICAL: Outbox event missing for eventId: " + eventId));
 
             // Reset ONLY if needed

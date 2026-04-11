@@ -4,10 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ops.order._processing.entity.FailedEvent;
 import com.ops.order._processing.entity.Order;
 import com.ops.order._processing.entity.OutboxEvent;
+import com.ops.order._processing.enums.OrderStatus;
 import com.ops.order._processing.event.OrderEvent;
 import com.ops.order._processing.repository.FailedEventRepository;
 import com.ops.order._processing.repository.OrderRepository;
 import com.ops.order._processing.repository.OutboxEventRepository;
+import com.ops.order._processing.statemachine.OrderStateMachine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -89,8 +91,69 @@ public class DLQReprocessingService {
                 return;
             }
 
-            //  VALID RETRY → PUSH TO OUTBOX
+            OrderStatus currentState = OrderStatus.valueOf(order.getStatus());
+            OrderStatus eventState = OrderStatus.valueOf(event.getEventType());
 
+            int currentOrder = currentState.getOrder();
+            int incomingOrder = eventState.getOrder();
+
+            String failureType = failedEvent.getFailureType();
+
+// 🔥 HANDLE ORDER-BASED EVENTS
+            if ("ORDER".equalsIgnoreCase(failureType)) {
+
+                if (incomingOrder != currentOrder + 1) {
+                    log.info("ORDER event not ready yet, waiting | orderId={} | current={} | incoming={}",
+                            order.getOrderId(), currentState, eventState);
+
+                    // DO NOTHING — just wait for next cycle
+                    return;
+                }
+            }
+
+            //  HANDLE TRANSIENT FAILURES
+            else if ("TRANSIENT".equalsIgnoreCase(failureType)) {
+
+                if (failedEvent.getRetryCount() >= MAX_RETRIES) {
+                    log.info("Max retries reached (TRANSIENT) | eventId={}", event.getEventId());
+
+                    failedEvent.setStatus("DEAD");
+                    failedEvent.setUpdatedAt(LocalDateTime.now());
+                    failedEventRepository.save(failedEvent);
+                    return;
+                }
+            }
+
+            //  HANDLE POISON EVENTS
+            else if ("POISON".equalsIgnoreCase(failureType)) {
+
+                log.info("Poison event — skipping permanently | eventId={}", event.getEventId());
+
+                failedEvent.setStatus("DEAD");
+                failedEvent.setUpdatedAt(LocalDateTime.now());
+                failedEventRepository.save(failedEvent);
+                return;
+            }
+
+            //  BUSINESS VALIDATION
+            if (!OrderStateMachine.isValidTransition(currentState, eventState)) {
+                log.error("Invalid transition during retry | orderId={} | current={} | incoming={}",
+                        order.getOrderId(), currentState, eventState);
+
+                failedEvent.setStatus("DEAD");
+                failedEvent.setUpdatedAt(LocalDateTime.now());
+                failedEventRepository.save(failedEvent);
+                return;
+            }
+
+            Optional<OutboxEvent> existing = outboxEventRepository.findByEventId(event.getEventId());
+
+            if (existing.isPresent()) {
+                log.info("Event already reprocessed, skipping: {}", event.getEventId());
+                return;
+            }
+
+            //  VALID RETRY → PUSH TO OUTBOX
             OutboxEvent outboxEvent = new OutboxEvent(
                     event.getEventId(),
                     event.getOrderId(),
@@ -102,7 +165,9 @@ public class DLQReprocessingService {
             log.info("Reprocessing scheduled via Outbox for eventId: " + eventId);
 
             //  Update retry state
-            handleRetryUpdate(failedEvent);
+            failedEvent.setStatus("REPROCESSED");
+            failedEvent.setUpdatedAt(LocalDateTime.now());
+            failedEventRepository.save(failedEvent);
 
         } catch (Exception e) {
             throw new RuntimeException("Reprocessing failed: " + e.getMessage(), e);
