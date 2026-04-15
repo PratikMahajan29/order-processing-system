@@ -53,7 +53,6 @@ public class OrderService {
         order.setProductName(dto.getProductName());
         order.setQuantity(dto.getQuantity());
 
-        // 🔥 FIXED
         order.setStatus("PENDING");
 
         order.setEventSequence(0L);

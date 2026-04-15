@@ -24,6 +24,11 @@ public class OutboxEvent {
 
     private LocalDateTime updatedAt;
 
+    private int retryCount;
+    private LocalDateTime lastAttemptAt;
+
+
+
     public OutboxEvent() {}
 
     public OutboxEvent(String eventId, String orderId, String payload, String status) {
@@ -62,4 +67,20 @@ public class OutboxEvent {
     public LocalDateTime getUpdatedAt() { return updatedAt; }
 
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public int getRetryCount() {
+        return retryCount;
+    }
+
+    public void setRetryCount(int retryCount) {
+        this.retryCount = retryCount;
+    }
+
+    public LocalDateTime getLastAttemptAt() {
+        return lastAttemptAt;
+    }
+
+    public void setLastAttemptAt(LocalDateTime lastAttemptAt) {
+        this.lastAttemptAt = lastAttemptAt;
+    }
 }

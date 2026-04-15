@@ -12,4 +12,8 @@ public interface FailedEventRepository extends JpaRepository<FailedEvent, String
                                                                             int retryCount,
                                                                             LocalDateTime time);
 
+
+    boolean existsByEventId(String eventId);
+
+    List<FailedEvent> findByOrderIdAndStatus(String orderId, String status);
 }

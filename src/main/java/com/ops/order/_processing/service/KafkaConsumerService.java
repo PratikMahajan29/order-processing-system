@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 import com.ops.order._processing.enums.OrderStatus;
 import com.ops.order._processing.statemachine.OrderStateMachine;
 import java.time.LocalDateTime;
+import com.ops.order._processing.enums.FailureType;
+import com.ops.order._processing.exception.ClassifiedException;
 
 @Service
 public class KafkaConsumerService {
@@ -22,16 +24,18 @@ public class KafkaConsumerService {
     private final OrderRepository orderRepository;
     private final ProcessedEventService processedEventService;
     private final MetricsService metricsService;
-
-    private static final Logger log = LoggerFactory.getLogger(KafkaConsumerService.class);
+    private final DLQReprocessingService dlqReprocessingService;
 
     public KafkaConsumerService(OrderRepository orderRepository,
                                 ProcessedEventService processedEventService,
-                                MetricsService metricsService) {
+                                MetricsService metricsService, DLQReprocessingService dlqReprocessingService) {
         this.orderRepository = orderRepository;
         this.processedEventService = processedEventService;
         this.metricsService = metricsService;
+        this.dlqReprocessingService = dlqReprocessingService;
     }
+
+    private static final Logger log = LoggerFactory.getLogger(KafkaConsumerService.class);
 
     @KafkaListener(topics = "order-topic", groupId = "order-group")
     public void consume(ConsumerRecord<String, OrderEvent> record, Acknowledgment ack) {
@@ -118,24 +122,36 @@ public class KafkaConsumerService {
             log.info("SUCCESS | eventId={} | orderId={} | thread={}",
                     event.getEventId(), event.getOrderId(), thread);
 
+            //  REACTIVE RETRY
+            try {
+                dlqReprocessingService.reprocessByOrderId(event.getOrderId());
+            } catch (Exception ex) {
+                log.error("Reactive retry trigger failed | orderId={}", event.getOrderId(), ex);
+            }
+
             ack.acknowledge();
 
         } catch (Exception e) {
 
-            log.error("ERROR | eventId={} | thread={} | error={}",
-                    event.getEventId(), thread, e.getMessage(), e);
-
             metricsService.incrementFailure();
 
-            if (isRetryable(e)) {
+            //  classify failure properly
+            Order order = orderRepository.findByOrderId(event.getOrderId()).orElse(null);
+
+            FailureType failureType = classifyFailure(e, order, event);
+
+            log.error("ERROR | type={} | eventId={} | thread={} | error={}",
+                    failureType, event.getEventId(), thread, e.getMessage(), e);
+
+            //  ORDER or TRANSIENT → send to DLQ
+            if (failureType == FailureType.ORDER || failureType == FailureType.TRANSIENT) {
                 metricsService.incrementRetry();
-                throw e; // Let it go to DLQ directly (no Kafka retry)
+
+                throw new ClassifiedException(failureType, e.getMessage(), e);
             }
 
-            //  NON-RETRYABLE → MARK ORDER AS FAILED
+            //  POISON → mark FAILED + complete event
             try {
-                Order order = orderRepository.findByOrderId(event.getOrderId()).orElse(null);
-
                 if (order != null) {
                     order.setStatus(OrderStatus.FAILED.name());
                     order.setFailureReason(e.getMessage());
@@ -150,7 +166,6 @@ public class KafkaConsumerService {
 
             processedEventService.markCompleted(event.getEventId());
             ack.acknowledge();
-
         } finally {
             long endTime = System.currentTimeMillis();
 
@@ -165,14 +180,39 @@ public class KafkaConsumerService {
         }
     }
 
-    private boolean isRetryable(Exception e) {
-        return e instanceof RetryableException;
-    }
-
     private String getHeader(ConsumerRecord<String, OrderEvent> record) {
         if (record.headers().lastHeader("correlationId") != null) {
             return new String(record.headers().lastHeader("correlationId").value());
         }
         return "N/A";
+    }
+
+    private FailureType classifyFailure(Exception e, Order order, OrderEvent event) {
+
+        //  ORDER VIOLATION
+        if (e instanceof RetryableException &&
+                "ORDER_VIOLATION".equals(e.getMessage())) {
+            return FailureType.ORDER;
+        }
+
+        //  POISON (business invalid)
+        if (e instanceof NonRetryableException) {
+            return FailureType.POISON;
+        }
+
+        // STATE MACHINE GUARD (extra safety)
+        try {
+            OrderStatus currentState = OrderStatus.valueOf(order.getStatus());
+            OrderStatus nextState = OrderStatus.valueOf(event.getEventType());
+
+            if (!OrderStateMachine.isValidTransition(currentState, nextState)) {
+                return FailureType.POISON;
+            }
+        } catch (Exception ignore) {
+            return FailureType.POISON;
+        }
+
+        //  DEFAULT → TRANSIENT
+        return FailureType.TRANSIENT;
     }
 }

@@ -5,6 +5,7 @@ import com.ops.order._processing.entity.FailedEvent;
 import com.ops.order._processing.event.OrderEvent;
 import com.ops.order._processing.repository.FailedEventRepository;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.header.Header;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -35,18 +36,39 @@ public class KafkaDLQConsumerService {
         String exceptionType = getHeader(record, "exception-type");
 
         try {
+            // STEP 1: prevent duplicate DLQ entries early
+            if (failedEventRepository.existsByEventId(event.getEventId())) {
+                log.warn("Duplicate DLQ event ignored | eventId={}", event.getEventId());
+                return;
+            }
+
+            // STEP 2: extract failureType FIRST
+            Header failureHeader = record.headers().lastHeader("failure-type");
+
+            String failureType = "TRANSIENT"; // default
+
+            if (failureHeader != null) {
+                failureType = new String(failureHeader.value(), StandardCharsets.UTF_8);
+            } else {
+                log.error("Missing failure-type header | eventId={}", event.getEventId());
+            }
+
+            // STEP 3: build failed event
             FailedEvent failedEvent = new FailedEvent();
             failedEvent.setEventId(event.getEventId());
+            failedEvent.setOrderId(event.getOrderId());
             failedEvent.setPayload(objectMapper.writeValueAsString(event));
             failedEvent.setExceptionType(exceptionType);
             failedEvent.setErrorMessage(errorMessage);
             failedEvent.setRetryCount(0);
-            failedEvent.setNextRetryAt(LocalDateTime.now().plusSeconds(10)); // Schedule next retry after 10 secs
 
-            String failureType = "TRANSIENT"; // default
-
-            if ("RetryableException".equals(exceptionType)) {
-                failureType = "ORDER"; // TEMPORARY assumption (we refine later)
+            //  STEP 4: smart retry scheduling
+            if ("ORDER".equalsIgnoreCase(failureType)) {
+                // state-driven → retry immediately
+                failedEvent.setNextRetryAt(LocalDateTime.now());
+            } else {
+                // time-driven retry
+                failedEvent.setNextRetryAt(LocalDateTime.now().plusSeconds(10));
             }
 
             failedEvent.setFailureType(failureType);
@@ -54,20 +76,17 @@ public class KafkaDLQConsumerService {
             failedEvent.setCreatedAt(LocalDateTime.now());
             failedEvent.setUpdatedAt(LocalDateTime.now());
 
+            // STEP 5: persist
             failedEventRepository.save(failedEvent);
 
-        } catch (Exception e) {
-            log.info("Failed to persist DLQ event: " + e.getMessage());
-        }
+            // structured logging
+            log.info("DLQ event stored | eventId={} | type={} | error={}",
+                    event.getEventId(), failureType, errorMessage);
 
-        log.info("========== DLQ MESSAGE RECEIVED ==========");
-        log.info("Event ID       : " + event.getEventId());
-        log.info("Product        : " + event.getProductName());
-        log.info("Quantity       : " + event.getQuantity());
-        log.info("Status         : " + event.getEventType());
-        log.info("Exception Type : " + exceptionType);
-        log.info("Error Message  : " + errorMessage);
-        log.info("==========================================");
+        } catch (Exception e) {
+            log.error("Failed to persist DLQ event | eventId={} | error={}",
+                    event.getEventId(), e.getMessage(), e);
+        }
     }
 
     private String getHeader(ConsumerRecord<String, OrderEvent> record, String key) {

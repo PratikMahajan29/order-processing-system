@@ -27,7 +27,7 @@ public class FailedEventRetryScheduler {
     private static final Logger log = LoggerFactory.getLogger(FailedEventRetryScheduler.class);
 
 
-    @Scheduled(fixedDelay = 10000) // every 10 seconds
+//    @Scheduled(fixedDelay = 10000) // every 10 seconds
     public void retryFailedEvents() {
 
         List<FailedEvent> events =

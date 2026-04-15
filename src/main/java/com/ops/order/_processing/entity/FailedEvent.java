@@ -10,6 +10,9 @@ public class FailedEvent {
     @Id
     private String eventId;
 
+    @Column(name = "order_id")
+    private String orderId;
+
     @Lob
     private String payload;
 
@@ -107,5 +110,13 @@ public class FailedEvent {
 
     public void setFailureType(String failureType) {
         this.failureType = failureType;
+    }
+
+    public String getOrderId() {
+        return orderId;
+    }
+
+    public void setOrderId(String orderId) {
+        this.orderId = orderId;
     }
 }
