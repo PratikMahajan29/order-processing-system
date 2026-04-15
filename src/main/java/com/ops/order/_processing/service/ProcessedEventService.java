@@ -58,6 +58,17 @@ public class ProcessedEventService {
                 return false;
             }
 
+            if ("FAILED".equalsIgnoreCase(status)) {
+
+                int updated = jdbcTemplate.update("""
+                    UPDATE processed_events
+                    SET status = 'PROCESSING', updated_at = NOW()
+                    WHERE event_id = ? AND status = 'FAILED'
+                    """, eventId);
+
+                return updated > 0;
+            }
+
             // STEP 4: Still processing → check if stuck
             if ("PROCESSING".equalsIgnoreCase(status)) {
 
@@ -99,4 +110,20 @@ public class ProcessedEventService {
             );
         }
     }
+
+    @Transactional
+    public void markFailed(String eventId) {
+
+        int updated = jdbcTemplate.update("""
+        UPDATE processed_events
+        SET status = 'FAILED', updated_at = NOW()
+        WHERE event_id = ? AND status = 'PROCESSING'
+    """, eventId);
+
+        if (updated == 0) {
+            throw new IllegalStateException(
+                    "Failed to mark FAILED — invalid state for eventId: " + eventId
+            );
+        }
     }
+}

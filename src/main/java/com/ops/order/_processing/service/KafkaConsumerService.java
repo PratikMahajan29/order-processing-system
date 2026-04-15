@@ -145,6 +145,9 @@ public class KafkaConsumerService {
 
             //  ORDER or TRANSIENT → send to DLQ
             if (failureType == FailureType.ORDER || failureType == FailureType.TRANSIENT) {
+
+                processedEventService.markFailed(event.getEventId()); // 🔥 ADD THIS
+
                 metricsService.incrementRetry();
 
                 throw new ClassifiedException(failureType, e.getMessage(), e);
