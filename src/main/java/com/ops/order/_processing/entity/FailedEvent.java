@@ -10,6 +10,9 @@ public class FailedEvent {
     @Id
     private String eventId;
 
+    @Column(name = "order_id")
+    private String orderId;
+
     @Lob
     private String payload;
 
@@ -22,6 +25,8 @@ public class FailedEvent {
     private int retryCount;
 
     private LocalDateTime nextRetryAt;
+
+    private String failureType; // ORDER / TRANSIENT / POISON
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -97,5 +102,21 @@ public class FailedEvent {
 
     public void setNextRetryAt(LocalDateTime nextRetryAt) {
         this.nextRetryAt = nextRetryAt;
+    }
+
+    public String getFailureType() {
+        return failureType;
+    }
+
+    public void setFailureType(String failureType) {
+        this.failureType = failureType;
+    }
+
+    public String getOrderId() {
+        return orderId;
+    }
+
+    public void setOrderId(String orderId) {
+        this.orderId = orderId;
     }
 }

@@ -13,7 +13,7 @@ public class ProcessingRecoveryScheduler {
     }
 
     // Runs every 30 seconds
-    @Scheduled(fixedDelay = 30000)
+//    @Scheduled(fixedDelay = 30000)
     public void runRecovery() {
         recoveryService.recoverStuckEvents();
     }

@@ -28,8 +28,10 @@ public class OrderService {
 
     private static final Logger log = LoggerFactory.getLogger(OrderService.class);
 
-
-    public OrderService(OrderRepository orderRepository, OutboxEventRepository outboxEventRepository, ObjectMapper objectMapper, IdempotencyService idempotencyService) {
+    public OrderService(OrderRepository orderRepository,
+                        OutboxEventRepository outboxEventRepository,
+                        ObjectMapper objectMapper,
+                        IdempotencyService idempotencyService) {
         this.orderRepository = orderRepository;
         this.outboxEventRepository = outboxEventRepository;
         this.objectMapper = objectMapper;
@@ -39,7 +41,6 @@ public class OrderService {
     @Transactional
     public Order createOrder(OrderRequestDTO dto) {
 
-        // Basic validation (ONLY structural)
         if (dto.getQuantity() == null) {
             throw new IllegalArgumentException("Quantity is required");
         }
@@ -47,33 +48,35 @@ public class OrderService {
         String orderId = java.util.UUID.randomUUID().toString();
         String eventId = java.util.UUID.randomUUID().toString();
 
-        // Save order
         Order order = new Order();
         order.setOrderId(orderId);
-        order.setEventId(eventId);
         order.setProductName(dto.getProductName());
         order.setQuantity(dto.getQuantity());
-        order.setStatus("CREATED");
+
+        order.setStatus("PENDING");
+
+        order.setEventSequence(0L);
         order.setCreatedAt(LocalDateTime.now());
         order.setUpdatedAt(LocalDateTime.now());
         order.setFailureReason(null);
 
         orderRepository.save(order);
 
-        log.info("Order created with ID: {}", order.getOrderId());
+        log.info("Order created | orderId={}", orderId);
 
         try {
-            // Create event
             OrderEvent event = new OrderEvent();
             event.setEventId(eventId);
             event.setOrderId(orderId);
             event.setProductName(dto.getProductName());
             event.setQuantity(dto.getQuantity());
-            event.setStatus("CREATED");
+
+            event.setEventType("CREATED");
+            event.setSequence(0L); // ignored
+            event.setTimestamp(System.currentTimeMillis());
 
             String payload = objectMapper.writeValueAsString(event);
 
-            // Save OUTBOX
             OutboxEvent outboxEvent = new OutboxEvent(
                     eventId,
                     orderId,
@@ -83,7 +86,8 @@ public class OrderService {
 
             outboxEventRepository.save(outboxEvent);
 
-            log.info("Outbox event created with ID: {}", event.getEventId());
+            log.info("Outbox event created | eventId={} | orderId={}",
+                    eventId, orderId);
 
         } catch (Exception e) {
             throw new RuntimeException("Failed to serialize event", e);
@@ -101,35 +105,120 @@ public class OrderService {
     public Object createOrderWithIdempotency(String key, OrderRequestDTO dto) {
 
         String requestJson;
-        try{
+        try {
             requestJson = objectMapper.writeValueAsString(dto);
-        }catch(Exception e){
+        } catch (Exception e) {
             throw new RuntimeException("Failed to serialize request", e);
         }
+
         String requestHash = HashUtil.sha256(requestJson);
 
         IdempotencyKey idem = idempotencyService.process(key, requestHash);
 
-        //  Already completed
         if ("COMPLETED".equals(idem.getStatus())) {
-            System.out.print("Already completed ---> Returning response for idempotency key: " + key);
+            log.info("Idempotency hit | key={} | returning cached response", key);
             return idem.getResponsePayload();
         }
 
-        //  BUSINESS LOGIC
         Order order = createOrder(dto);
 
         Map<String, Object> response = new HashMap<>();
         response.put("orderId", order.getOrderId());
         response.put("status", order.getStatus());
 
-        //  Mark completed INSIDE SAME TX
         String jsonResponse;
         try {
             jsonResponse = objectMapper.writeValueAsString(response);
         } catch (Exception e) {
             throw new RuntimeException("Failed to serialize response", e);
         }
+
+        idempotencyService.markCompleted(key, jsonResponse);
+
+        return response;
+    }
+
+    @Transactional
+    public Long publishEvent(String orderId, String eventType) {
+
+        Order order = orderRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found"));
+
+        String eventId = java.util.UUID.randomUUID().toString();
+
+        try {
+            OrderEvent event = new OrderEvent();
+            event.setEventId(eventId);
+            event.setOrderId(orderId);
+            event.setProductName(order.getProductName());
+            event.setQuantity(order.getQuantity());
+
+            event.setEventType(eventType);
+            event.setSequence(0L);
+            event.setTimestamp(System.currentTimeMillis());
+
+            String payload = objectMapper.writeValueAsString(event);
+
+            OutboxEvent outboxEvent = new OutboxEvent(
+                    eventId,
+                    orderId,
+                    payload,
+                    "NEW"
+            );
+
+            outboxEventRepository.save(outboxEvent);
+
+            log.info("Event published | orderId={} | eventType={}",
+                    orderId, eventType);
+
+            return 0L;
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to serialize event", e);
+        }
+    }
+
+    @Transactional
+    public Object publishEventWithIdempotency(
+            String key,
+            String orderId,
+            String eventType) {
+
+        String requestJson;
+        try {
+            Map<String, Object> map = new HashMap<>();
+            map.put("orderId", orderId);
+            map.put("eventType", eventType);
+
+            requestJson = objectMapper.writeValueAsString(map);
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to serialize request", e);
+        }
+
+        String requestHash = HashUtil.sha256(requestJson);
+
+        IdempotencyKey idem = idempotencyService.process(key, requestHash);
+
+        if ("COMPLETED".equals(idem.getStatus())) {
+            log.info("Idempotency hit (event) | key={}", key);
+            return idem.getResponsePayload();
+        }
+
+        publishEvent(orderId, eventType);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("orderId", orderId);
+        response.put("eventType", eventType);
+        response.put("status", "ACCEPTED");
+
+        String jsonResponse;
+        try {
+            jsonResponse = objectMapper.writeValueAsString(response);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
         idempotencyService.markCompleted(key, jsonResponse);
 
         return response;

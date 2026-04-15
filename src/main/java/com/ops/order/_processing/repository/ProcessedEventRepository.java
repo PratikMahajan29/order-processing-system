@@ -29,4 +29,8 @@ public interface ProcessedEventRepository extends JpaRepository<ProcessedEvent, 
             @Param("cutoffTime") LocalDateTime cutoffTime,
             @Param("limit") int limit
     );
+
+    boolean existsByEventId(String eventId);
+
+    boolean existsByEventIdAndStatus(String eventId, String status);
 }

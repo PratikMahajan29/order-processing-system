@@ -1,7 +1,9 @@
 package com.ops.order._processing.config;
 
 import com.ops.order._processing.event.OrderEvent;
+import com.ops.order._processing.exception.ClassifiedException;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.common.header.internals.RecordHeaders;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -46,7 +48,7 @@ public class KafkaConsumerConfig {
                 new ConcurrentKafkaListenerContainerFactory<>();
 
         factory.setConsumerFactory(consumerFactory);
-        factory.setConcurrency(6);
+        factory.setConcurrency(1);
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);
         factory.setCommonErrorHandler(errorHandler);
 
@@ -63,17 +65,21 @@ public class KafkaConsumerConfig {
                 );
 
         recoverer.setHeadersFunction((record, ex) -> {
-            org.apache.kafka.common.header.internals.RecordHeaders headers =
-                    new org.apache.kafka.common.header.internals.RecordHeaders();
+            RecordHeaders headers =
+                    new RecordHeaders();
 
             Throwable root = ex.getCause() != null ? ex.getCause() : ex;
 
             headers.add("exception-type", root.getClass().getSimpleName().getBytes());
             headers.add("error-message", root.getMessage().getBytes());
+
+            if (root instanceof ClassifiedException ce) {
+                headers.add("failure-type", ce.getFailureType().name().getBytes());
+            }
             return headers;
         });
 
-        FixedBackOff backOff = new FixedBackOff(2000L, 3);
+        FixedBackOff backOff = new FixedBackOff(0L, 0L); // No retries, immediately send to DLQ
 
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, backOff);
 
